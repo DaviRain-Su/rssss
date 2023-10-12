@@ -13,6 +13,11 @@ pub const DURATION_ONE_MONTH: i64 = 60 * 60 * 24 * 30;
 // Assume a maximum number of users for space allocation
 pub const MAX_USERS: usize = 1000;
 
+pub const LOGGED_IN_USERS: &[u8] = b"logged-in-users";
+pub const RSS_SUBSCRIPTIONS: &[u8] = b"subscriptions";
+pub const RSS: &[u8] = b"rss";
+pub const SUB_PRICE: &[u8] = b"sub-price";
+
 #[program]
 pub mod rssss {
     use super::*;
@@ -46,6 +51,12 @@ pub mod rssss {
             .set_inner(SubscriptionPrice {
                 price_one_month: price,
             });
+        Ok(())
+    }
+
+    pub fn change_sub_price(ctx: Context<ChangeSubPrice>, price: u64) -> Result<()> {
+        let subscription_price_acc = ctx.accounts.subscription_price_acc.borrow_mut();
+        subscription_price_acc.price_one_month = price;
         Ok(())
     }
 
@@ -169,7 +180,7 @@ pub struct Initialize<'info> {
         init,
         payer = user,
         space = 8 + RssSource::SIZE,
-        seeds = [b"rss", user.key().as_ref()],
+        seeds = [RSS, user.key().as_ref()],
         bump
     )]
     pub rss_source_account: Account<'info, RssSource>,
@@ -177,7 +188,7 @@ pub struct Initialize<'info> {
         init,
         payer = user,
         space = 8 + size_of::<Subscriptions>(),
-        seeds = [b"subscriptions", user.key().as_ref()],
+        seeds = [RSS_SUBSCRIPTIONS, user.key().as_ref()],
         bump
     )]
     pub subscriptions_account: Account<'info, Subscriptions>,
@@ -185,7 +196,7 @@ pub struct Initialize<'info> {
         init,
         payer = user,
         space = 8 + size_of::<SubscriptionPrice>(),
-        seeds = [b"subprice", user.key().as_ref()],
+        seeds = [SUB_PRICE, user.key().as_ref()],
         bump
     )]
     pub subscription_price_acc: Account<'info, SubscriptionPrice>,
@@ -195,10 +206,22 @@ pub struct Initialize<'info> {
 }
 
 #[derive(Accounts)]
+pub struct ChangeSubPrice<'info> {
+    #[account(
+        mut,
+        seeds = [SUB_PRICE, user.key().as_ref()],
+        bump
+    )]
+    pub subscription_price_acc: Account<'info, SubscriptionPrice>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+}
+
+#[derive(Accounts)]
 pub struct AddItem<'info> {
     #[account(
         mut,
-        seeds = [b"rss", user.key().as_ref()],
+        seeds = [RSS, user.key().as_ref()],
         bump,
     )]
     pub rss_source_account: Account<'info, RssSource>,
@@ -210,7 +233,7 @@ pub struct AddItem<'info> {
 pub struct RemoveItem<'info> {
     #[account(
         mut,
-        seeds = [b"rss", user.key().as_ref()],
+        seeds = [RSS, user.key().as_ref()],
         bump,
     )]
     pub rss_source_account: Account<'info, RssSource>,
@@ -228,7 +251,7 @@ pub struct Subscribe<'info> {
     pub subscription_account: AccountInfo<'info>,
     #[account(
         mut,
-        seeds = [b"subscriptions", user.key().as_ref()],
+        seeds = [RSS_SUBSCRIPTIONS, user.key().as_ref()],
         bump,
     )]
     pub subscriptions_account: Account<'info, Subscriptions>,
@@ -241,7 +264,7 @@ pub struct Subscribe<'info> {
 pub struct CancelSubscribe<'info> {
     #[account(
         mut,
-        seeds = [b"subscriptions", user.key().as_ref()],
+        seeds = [RSS_SUBSCRIPTIONS, user.key().as_ref()],
         bump,
     )]
     pub subscriptions_account: Account<'info, Subscriptions>,
@@ -252,7 +275,7 @@ pub struct CancelSubscribe<'info> {
 #[derive(Accounts)]
 pub struct GetActiveSubscriptions<'info> {
     #[account(
-        seeds = [b"subscriptions", user.key().as_ref()],
+        seeds = [RSS_SUBSCRIPTIONS, user.key().as_ref()],
         bump,
     )]
     pub subscriptions_account: Account<'info, Subscriptions>,
@@ -266,7 +289,7 @@ pub struct InitializeLoggedInUsers<'info> {
         init,
         payer = user,
         space = 8 + (32 * MAX_USERS),  // Assume a maximum number of users for space allocation
-        seeds = [b"logged-in-users"],
+        seeds = [LOGGED_IN_USERS],
         bump
     )]
     pub logged_in_users_account: Account<'info, LoggedInUsers>,
@@ -279,7 +302,7 @@ pub struct InitializeLoggedInUsers<'info> {
 pub struct AddLoggedInUser<'info> {
     #[account(
         mut,
-        seeds = [b"logged-in-users"],
+        seeds = [LOGGED_IN_USERS],
         bump
     )]
     pub logged_in_users_account: Account<'info, LoggedInUsers>,
