@@ -86,16 +86,29 @@ pub mod rssss {
         );
         system_program::transfer(cpi_context, price)?;
 
-        // add this subscription to subscriptions_account
+        // Get the current time
         let current_time = Clock::get()?.unix_timestamp;
-        let subscrption = Subscription {
-            seller: subscription_account.key(),
-            start_time: current_time,
-            duration: DURATION_ONE_MONTH,
-            last_payment_time: current_time + DURATION_ONE_MONTH,
-        };
+
+        // Check if this subscription already exists
         let subscription_accounts = ctx.accounts.subscriptions_account.borrow_mut();
-        subscription_accounts.subscriptions.push(subscrption);
+        if let Some(subscription) = subscription_accounts
+            .subscriptions
+            .iter_mut()
+            .find(|s| s.seller == subscription_account.key())
+        {
+            // Subscription exists, update it
+            subscription.last_payment_time = current_time;
+            subscription.duration += DURATION_ONE_MONTH; // Assuming DURATION_ONE_MONTH is defined
+        } else {
+            // Subscription doesn't exist, create a new one
+            let subscription = Subscription {
+                seller: subscription_account.key(),
+                start_time: current_time,
+                duration: DURATION_ONE_MONTH,
+                last_payment_time: current_time + DURATION_ONE_MONTH,
+            };
+            subscription_accounts.subscriptions.push(subscription);
+        }
 
         Ok(())
     }
