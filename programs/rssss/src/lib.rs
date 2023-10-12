@@ -23,22 +23,13 @@ pub const SUB_PRICE: &[u8] = b"sub-price";
 pub mod rssss {
     use super::*;
 
+    // this only call should be admin
     pub fn initialize_logged_in_users(ctx: Context<InitializeLoggedInUsers>) -> Result<()> {
         let logged_in_users = LoggedInUsers::default();
         ctx.accounts
             .logged_in_users_account
             .set_inner(logged_in_users);
         Ok(())
-    }
-
-    pub fn add_logged_in_user(ctx: Context<AddLoggedInUser>, user_pubkey: Pubkey) -> Result<()> {
-        let logged_in_users_account = ctx.accounts.logged_in_users_account.borrow_mut();
-        if logged_in_users_account.users.len() < MAX_USERS {
-            logged_in_users_account.users.push(user_pubkey);
-            Ok(())
-        } else {
-            Err(ErrorCode::MaxUsersReached.into())
-        }
     }
 
     pub fn initialize(ctx: Context<Initialize>, price: u64) -> Result<()> {
@@ -52,7 +43,13 @@ pub mod rssss {
             .set_inner(SubscriptionPrice {
                 price_one_month: price,
             });
-        Ok(())
+        let logged_in_users_account = ctx.accounts.logged_in_users_account.borrow_mut();
+        if logged_in_users_account.users.len() < MAX_USERS {
+            logged_in_users_account.users.push(ctx.accounts.user.key());
+            Ok(())
+        } else {
+            Err(ErrorCode::MaxUsersReached.into())
+        }
     }
 
     pub fn change_sub_price(ctx: Context<ChangeSubPrice>, price: u64) -> Result<()> {
@@ -171,6 +168,12 @@ pub struct Initialize<'info> {
         bump
     )]
     pub subscription_price_acc: Account<'info, SubscriptionPrice>,
+    #[account(
+        mut,
+        seeds = [LOGGED_IN_USERS],
+        bump
+    )]
+    pub logged_in_users_account: Account<'info, LoggedInUsers>,
     #[account(mut)]
     pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -255,16 +258,6 @@ pub struct InitializeLoggedInUsers<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-pub struct AddLoggedInUser<'info> {
-    #[account(
-        mut,
-        seeds = [LOGGED_IN_USERS],
-        bump
-    )]
-    pub logged_in_users_account: Account<'info, LoggedInUsers>,
 }
 
 #[account]
