@@ -2,27 +2,31 @@
 
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
+use core::mem::size_of;
 use core::mem::size_of_val;
 use opml::{Outline, OPML};
 use std::borrow::BorrowMut;
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
+/// one month as seconds
+pub const DURATION_ONE_MONTH: i64 = 60 * 60 * 24 * 30;
+
 #[program]
 pub mod rssss {
-
-    use std::ops::Deref;
-
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+    pub fn initialize(ctx: Context<Initialize>, price: u64) -> Result<()> {
         let rss_source = RssSource::default();
         ctx.accounts.rss_source_account.set_inner(rss_source);
-        ctx.accounts.list_account.set_inner(RssSourceListing {
-            seller: ctx.accounts.user.key(),
-            price: 0,
-            is_list: false,
-        });
+        ctx.accounts
+            .subscriptions_account
+            .set_inner(Subscriptions::default());
+        ctx.accounts
+            .subscription_price_acc
+            .set_inner(SubscriptionPrice {
+                price_one_month: price,
+            });
         Ok(())
     }
 
@@ -64,55 +68,34 @@ pub mod rssss {
     }
 
     // list rss source you want to sell
-    pub fn list_rss_source(ctx: Context<ListRssSource>, price: u64) -> Result<()> {
-        let listing = RssSourceListing {
-            seller: *ctx.accounts.user.key,
-            price,
-            is_list: true,
-        };
-        ctx.accounts.list_account.set_inner(listing);
+    pub fn subscribe(ctx: Context<Subscribe>, price: u64) -> Result<()> {
+        let subscription_account = ctx.accounts.subscription_account.borrow_mut();
 
-        Ok(())
-    }
-
-    pub fn cancel_list_rss_source(ctx: Context<CancelListRssSource>) -> Result<()> {
-        let listing = RssSourceListing {
-            seller: *ctx.accounts.user.key,
-            price: 0,
-            is_list: false,
-        };
-        ctx.accounts.list_account.set_inner(listing);
-
-        Ok(())
-    }
-
-    pub fn purchase_rss_source(ctx: Context<PurchaseRssSource>, amount: u64) -> Result<()> {
-        let list_account = ctx.accounts.list_account.clone();
-        if !list_account.is_list {
-            return Err(ErrorCode::NotListed.into());
-        }
-        if list_account.price != amount {
-            return Err(ErrorCode::IncorrectAmount.into());
-        }
-
+        // first: transfer lamports to subscription_account
         // check buyer have enought balance
-        if ctx.accounts.buyer.to_account_info().clone().lamports() <= amount {
+        if ctx.accounts.user.to_account_info().clone().lamports() <= price {
             return Err(ErrorCode::InsufficientBalance.into());
         }
 
         let cpi_context = CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
             system_program::Transfer {
-                from: ctx.accounts.buyer.to_account_info().clone(),
-                to: ctx.accounts.user.to_account_info().clone(),
+                from: ctx.accounts.user.to_account_info().clone(),
+                to: subscription_account.to_account_info().clone(),
             },
         );
-        system_program::transfer(cpi_context, amount)?;
+        system_program::transfer(cpi_context, price)?;
 
-        // Copy the RSS source to the buyer's account
-        let rss_source = ctx.accounts.rss_source_account.clone();
-        let buyer_rss_source = ctx.accounts.buyer_rss_source_account.borrow_mut();
-        buyer_rss_source.merge(rss_source.deref().clone());
+        // add this subscription to subscriptions_account
+        let current_time = Clock::get()?.unix_timestamp;
+        let subscrption = Subscription {
+            seller: subscription_account.key(),
+            start_time: current_time,
+            duration: DURATION_ONE_MONTH,
+            last_payment_time: current_time + DURATION_ONE_MONTH,
+        };
+        let subscription_accounts = ctx.accounts.subscriptions_account.borrow_mut();
+        subscription_accounts.subscriptions.push(subscrption);
 
         Ok(())
     }
@@ -124,18 +107,26 @@ pub struct Initialize<'info> {
         init,
         payer = user,
         space = 8 + RssSource::SIZE,
-        seeds = [b"rssss", user.key().as_ref()],
+        seeds = [b"rss", user.key().as_ref()],
         bump
     )]
     pub rss_source_account: Account<'info, RssSource>,
     #[account(
         init,
         payer = user,
-        space = 8 + RssSourceListing::SIZE,
-        seeds = [b"rssss-list", user.key().as_ref()],
+        space = 8 + size_of::<Subscriptions>(),
+        seeds = [b"subscriptions", user.key().as_ref()],
         bump
     )]
-    pub list_account: Account<'info, RssSourceListing>,
+    pub subscriptions_account: Account<'info, Subscriptions>,
+    #[account(
+        init,
+        payer = user,
+        space = 8 + size_of::<SubscriptionPrice>(),
+        seeds = [b"subprice", user.key().as_ref()],
+        bump
+    )]
+    pub subscription_price_acc: Account<'info, SubscriptionPrice>,
     #[account(mut)]
     pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -145,7 +136,7 @@ pub struct Initialize<'info> {
 pub struct AddItem<'info> {
     #[account(
         mut,
-        seeds = [b"rssss", user.key().as_ref()],
+        seeds = [b"rss", user.key().as_ref()],
         bump,
     )]
     pub rss_source_account: Account<'info, RssSource>,
@@ -157,7 +148,7 @@ pub struct AddItem<'info> {
 pub struct RemoveItem<'info> {
     #[account(
         mut,
-        seeds = [b"rssss", user.key().as_ref()],
+        seeds = [b"rss", user.key().as_ref()],
         bump,
     )]
     pub rss_source_account: Account<'info, RssSource>,
@@ -166,53 +157,30 @@ pub struct RemoveItem<'info> {
 }
 
 #[derive(Accounts)]
-pub struct ListRssSource<'info> {
+pub struct Subscribe<'info> {
+    // you want subscription account
+    pub subscription_account: AccountInfo<'info>,
     #[account(
         mut,
-        seeds = [b"rssss-list", user.key().as_ref()],
+        seeds = [b"subscriptions", user.key().as_ref()],
         bump,
     )]
-    pub list_account: Account<'info, RssSourceListing>,
+    pub subscriptions_account: Account<'info, Subscriptions>,
     #[account(mut)]
     pub user: Signer<'info>,
-}
-
-#[derive(Accounts)]
-pub struct CancelListRssSource<'info> {
-    #[account(
-        mut,
-        seeds = [b"rssss-list", user.key().as_ref()],
-        bump,
-    )]
-    pub list_account: Account<'info, RssSourceListing>,
-    #[account(mut)]
-    pub user: Signer<'info>,
-}
-
-#[derive(Accounts)]
-pub struct PurchaseRssSource<'info> {
-    #[account(
-        mut,
-        seeds = [b"rssss-list", user.key().as_ref()],
-        bump,
-    )]
-    pub list_account: Account<'info, RssSourceListing>,
-    #[account(
-        mut,
-        seeds = [b"rssss", user.key().as_ref()],
-        bump,
-    )]
-    pub rss_source_account: Account<'info, RssSource>,
-    #[account(
-        mut,
-        seeds = [b"rssss", buyer.key().as_ref()],
-        bump,
-    )]
-    pub buyer_rss_source_account: Account<'info, RssSource>,
-    pub user: Signer<'info>,
-    #[account(mut)]
-    pub buyer: Signer<'info>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct CancelSubscribe<'info> {
+    #[account(
+        mut,
+        seeds = [b"subscriptions", user.key().as_ref()],
+        bump,
+    )]
+    pub subscriptions_account: Account<'info, Subscriptions>,
+    #[account(mut)]
+    pub user: Signer<'info>,
 }
 
 #[account]
@@ -221,33 +189,15 @@ pub struct RssSource {
     document: Vec<u8>,
 }
 
+#[account]
+#[derive(Debug, PartialEq)]
+pub struct SubscriptionPrice {
+    price_one_month: u64,
+}
+
 impl RssSource {
     // for now is const set
     pub const SIZE: usize = 1024 * 10;
-
-    pub fn merge(&mut self, right: RssSource) {
-        let string = String::from_utf8(self.document.clone()).unwrap();
-        let mut self_opml = OPML::from_str(&string).unwrap();
-
-        let string = String::from_utf8(right.document.clone()).unwrap();
-        let right_opml = OPML::from_str(&string).unwrap();
-
-        // Merge
-        for right_outline in right_opml.body.outlines {
-            if !self_opml
-                .body
-                .outlines
-                .iter()
-                .any(|self_outline| self_outline.xml_url == right_outline.xml_url)
-            {
-                self_opml.body.outlines.push(right_outline);
-            }
-        }
-
-        // Serialize self_opml back into self.document
-        let merged_string = self_opml.to_string().unwrap();
-        self.document = merged_string.as_bytes().to_vec();
-    }
 }
 
 impl RssSource {
@@ -268,15 +218,39 @@ impl Default for RssSource {
 }
 
 #[account]
-#[derive(PartialEq, Debug)]
-pub struct RssSourceListing {
-    pub seller: Pubkey,
-    pub price: u64,
-    pub is_list: bool,
+#[derive(PartialEq, Debug, Default)]
+pub struct Subscriptions {
+    subscriptions: Vec<Subscription>,
 }
 
-impl RssSourceListing {
+#[account]
+#[derive(PartialEq, Debug)]
+pub struct Subscription {
+    pub seller: Pubkey,
+    pub start_time: i64,        // Subscription start time in Unix timestamp
+    pub duration: i64,          // Subscription duration in months
+    pub last_payment_time: i64, // Last payment time in Unix timestamp
+}
+
+impl Subscription {
     pub const SIZE: usize = 32 + 8 + 1;
+
+    // Checks if the subscription is active based on the current timestamp.
+    pub fn is_active(&self, current_time: i64) -> bool {
+        let elapsed_time_in_months = (current_time - self.start_time) / (30 * 24 * 3600);
+        elapsed_time_in_months < self.duration
+    }
+
+    // Updates the subscription duration based on a new payment.
+    pub fn update_duration(&mut self, additional_months: i64, payment_time: i64) {
+        self.duration += additional_months;
+        self.last_payment_time = payment_time;
+    }
+
+    // Checks if the subscription needs renewal based on the current timestamp.
+    pub fn needs_renewal(&self, current_time: i64) -> bool {
+        !self.is_active(current_time)
+    }
 }
 
 pub const DEFAULT_CONFIG_FILE: &str = r#"
