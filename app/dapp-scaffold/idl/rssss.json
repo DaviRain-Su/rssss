@@ -1,0 +1,275 @@
+{
+    "version": "0.1.0",
+    "name": "rssss",
+    "instructions": [
+        {
+            "name": "initializeLoggedInUsers",
+            "accounts": [
+                {
+                    "name": "loggedInUsersAccount",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "user",
+                    "isMut": true,
+                    "isSigner": true
+                },
+                {
+                    "name": "systemProgram",
+                    "isMut": false,
+                    "isSigner": false
+                }
+            ],
+            "args": []
+        },
+        {
+            "name": "initialize",
+            "accounts": [
+                {
+                    "name": "rssSourceAccount",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "subscriptionsAccount",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "subscriptionPriceAcc",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "loggedInUsersAccount",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "user",
+                    "isMut": true,
+                    "isSigner": true
+                },
+                {
+                    "name": "systemProgram",
+                    "isMut": false,
+                    "isSigner": false
+                }
+            ],
+            "args": [
+                {
+                    "name": "price",
+                    "type": "u64"
+                }
+            ]
+        },
+        {
+            "name": "changeSubPrice",
+            "accounts": [
+                {
+                    "name": "subscriptionPriceAcc",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "user",
+                    "isMut": true,
+                    "isSigner": true
+                }
+            ],
+            "args": [
+                {
+                    "name": "price",
+                    "type": "u64"
+                }
+            ]
+        },
+        {
+            "name": "updateItem",
+            "accounts": [
+                {
+                    "name": "rssSourceAccount",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "user",
+                    "isMut": true,
+                    "isSigner": true
+                }
+            ],
+            "args": [
+                {
+                    "name": "newDocument",
+                    "type": "bytes"
+                }
+            ]
+        },
+        {
+            "name": "subscribe",
+            "accounts": [
+                {
+                    "name": "feeAccount",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "subscriptionAccount",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "subscriptionsAccount",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "user",
+                    "isMut": true,
+                    "isSigner": true
+                },
+                {
+                    "name": "systemProgram",
+                    "isMut": false,
+                    "isSigner": false
+                }
+            ],
+            "args": [
+                {
+                    "name": "price",
+                    "type": "u64"
+                }
+            ]
+        },
+        {
+            "name": "getActiveSubscriptions",
+            "accounts": [
+                {
+                    "name": "subscriptionsAccount",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "user",
+                    "isMut": false,
+                    "isSigner": true
+                }
+            ],
+            "args": [
+                {
+                    "name": "currentTime",
+                    "type": "i64"
+                }
+            ],
+            "returns": {
+                "vec": "publicKey"
+            }
+        }
+    ],
+    "accounts": [
+        {
+            "name": "LoggedInUsers",
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "users",
+                        "type": {
+                            "vec": "publicKey"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "RssSource",
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "document",
+                        "type": "bytes"
+                    }
+                ]
+            }
+        },
+        {
+            "name": "SubscriptionPrice",
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "priceOneMonth",
+                        "type": "u64"
+                    }
+                ]
+            }
+        },
+        {
+            "name": "Subscriptions",
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "subscriptions",
+                        "type": {
+                            "vec": {
+                                "defined": "Subscription"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "Subscription",
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "seller",
+                        "type": "publicKey"
+                    },
+                    {
+                        "name": "startTime",
+                        "type": "i64"
+                    },
+                    {
+                        "name": "duration",
+                        "type": "i64"
+                    },
+                    {
+                        "name": "lastPaymentTime",
+                        "type": "i64"
+                    }
+                ]
+            }
+        }
+    ],
+    "errors": [
+        {
+            "code": 6000,
+            "name": "NotListed",
+            "msg": "not listed"
+        },
+        {
+            "code": 6001,
+            "name": "IncorrectAmount",
+            "msg": "incorrect amount"
+        },
+        {
+            "code": 6002,
+            "name": "InsufficientBalance",
+            "msg": "Insufficient balance."
+        },
+        {
+            "code": 6003,
+            "name": "MaxUsersReached",
+            "msg": "Max users reached."
+        }
+    ],
+    "metadata": {
+        "address": "E8mHZ8Qs3v9oVojisSkx3LAi1zpgfzuTg2edkGUNJS4n"
+    }
+}

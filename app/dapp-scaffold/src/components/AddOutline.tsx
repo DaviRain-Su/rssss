@@ -1,5 +1,5 @@
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { PublicKey, Keypair, SystemProgram, Transaction, TransactionMessage, TransactionSignature, VersionedTransaction } from '@solana/web3.js';
+import { Keypair, SystemProgram, Transaction, TransactionMessage, TransactionSignature, VersionedTransaction, PublicKey } from '@solana/web3.js';
 import { FC, useCallback } from 'react';
 import { notify } from "../utils/notifications";
 import * as anchor from '@project-serum/anchor';
@@ -7,9 +7,10 @@ import idl from "../../idl/rssss.json";
 
 const PROGRAM_ID = new PublicKey(idl.metadata.address);
 
-export const SendTransaction: FC = () => {
+export const AddOutline: FC = () => {
   const { connection } = useConnection();
-  const { publicKey, sendTransaction } = useWallet();
+  const { publicKey, sendTransaction, wallet } = useWallet();
+
 
   const onClick = useCallback(async () => {
     if (!publicKey) {
@@ -17,6 +18,9 @@ export const SendTransaction: FC = () => {
       console.log('error', `Send Transaction: Wallet not connected!`);
       return;
     }
+
+    console.log('Send Transaction: Wallet connected!', publicKey.toBase58());
+    console.log('Program id', PROGRAM_ID.toBase58());
 
 
     let signature: TransactionSignature = '';
@@ -30,6 +34,7 @@ export const SendTransaction: FC = () => {
           lamports: 1_000_000,
         }),
       ];
+
 
       // Get the lates block hash to use on our transaction and confirmation
       let latestBlockhash = await connection.getLatestBlockhash()
