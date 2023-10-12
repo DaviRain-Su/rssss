@@ -163,46 +163,6 @@ pub mod rssss {
 
         Ok(active_subscribers)
     }
-
-    // TODO: this is not working, must impl by frontend
-    // pub fn get_subscriber_opml_data(
-    //     ctx: Context<GetSubscriberOpmlData>,
-    //     active_subscribers: Vec<Pubkey>,
-    // ) -> Result<OPMLResponses> {
-    //     let mut opml_responses = Vec::new();
-
-    //     for subscriber in &active_subscribers {
-    //         // Derive the address of the subscriber's data account based on your PDA rules.
-    //         let (data_account_address, bump_seed) =
-    //             Pubkey::find_program_address(&[b"rss", subscriber.as_ref()], &crate::id());
-
-    //         // Create an AccountInfo instance for the subscriber's data account
-    //         // let data_account_info = create_account_info(ctx, data_account_address)?;
-
-    //         // Assume the data account contains a RssSource struct.
-    //         // Deserialize the RssSource struct from the data account's data.
-    //         // let rss_source: RssSource = anchor_lang::deserialize(&data_account_info.data.borrow())?;
-    //         let rss_source: RssSource = RssSource::default();
-
-    //         // Convert the RssSource document to OPML and extract title and html_url
-    //         let string = String::from_utf8(rss_source.document.clone()).unwrap();
-    //         let opml = OPML::from_str(&string).unwrap();
-
-    //         // Assuming the first outline contains the title and html_url you want
-    //         // Adjust this logic based on the actual structure of your OPML data
-    //         if let Some(outline) = opml.body.outlines.first() {
-    //             let response = OPMLResponse {
-    //                 title: outline.text.clone(),
-    //                 html_url: outline.html_url.clone().unwrap_or_default(),
-    //             };
-    //             opml_responses.push(response);
-    //         }
-    //     }
-
-    //     Ok(OPMLResponses {
-    //         res: opml_responses,
-    //     })
-    // }
 }
 
 #[derive(Accounts)]
@@ -262,8 +222,10 @@ pub struct RemoveItem<'info> {
 
 #[derive(Accounts)]
 pub struct Subscribe<'info> {
+    /// CHECK: It's Ok!
     // Account for collecting platform fees
     pub fee_account: AccountInfo<'info>,
+    /// CHECK: It's OK!
     // you want subscription account
     pub subscription_account: AccountInfo<'info>,
     #[account(
@@ -314,11 +276,6 @@ pub struct InitializeLoggedInUsers<'info> {
     pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
-
-// #[derive(Accounts)]
-// pub struct GetSubscriberOpmlData {
-//     // ... other fields ...
-// }
 
 #[account]
 #[derive(PartialEq, Debug, Default)]
