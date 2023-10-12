@@ -1,6 +1,5 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
-use opml::{Outline, OPML};
 use std::borrow::BorrowMut;
 use std::mem::size_of;
 use std::mem::size_of_val;
@@ -60,40 +59,10 @@ pub mod rssss {
         Ok(())
     }
 
-    pub fn add_item(
-        ctx: Context<AddItem>,
-        text: String,
-        html_url: String,
-        xml_url: String,
-    ) -> Result<()> {
+    pub fn update_item(ctx: Context<UpdateOutline>, new_document: Vec<u8>) -> Result<()> {
         let rss_source_account = ctx.accounts.rss_source_account.borrow_mut();
-        let string = String::from_utf8(rss_source_account.document.clone()).unwrap();
-        let mut opml = OPML::from_str(&string).unwrap();
+        rss_source_account.document = new_document;
 
-        let subscription_outline = Outline {
-            text: text.to_string(),
-            r#type: Some("rss".to_string()),
-            html_url: Some(html_url.to_string()),
-            xml_url: Some(xml_url.to_string()),
-            ..Default::default() // Fill other fields with default values
-        };
-
-        opml.body.outlines.push(subscription_outline);
-        rss_source_account.document = opml.to_string().unwrap().as_bytes().to_vec();
-
-        Ok(())
-    }
-
-    pub fn remove_item(ctx: Context<RemoveItem>, xml_url: String) -> Result<()> {
-        let rss_source_account = ctx.accounts.rss_source_account.borrow_mut();
-        let string = String::from_utf8(rss_source_account.document.clone()).unwrap();
-        let mut opml = OPML::from_str(&string).unwrap();
-
-        opml.body
-            .outlines
-            .retain(|subscription| subscription.xml_url.as_deref() != Some(&xml_url));
-
-        rss_source_account.document = opml.to_string().unwrap().as_bytes().to_vec();
         Ok(())
     }
 
@@ -218,19 +187,7 @@ pub struct ChangeSubPrice<'info> {
 }
 
 #[derive(Accounts)]
-pub struct AddItem<'info> {
-    #[account(
-        mut,
-        seeds = [RSS, user.key().as_ref()],
-        bump,
-    )]
-    pub rss_source_account: Account<'info, RssSource>,
-    #[account(mut)]
-    pub user: Signer<'info>,
-}
-
-#[derive(Accounts)]
-pub struct RemoveItem<'info> {
+pub struct UpdateOutline<'info> {
     #[account(
         mut,
         seeds = [RSS, user.key().as_ref()],
@@ -315,7 +272,7 @@ pub struct LoggedInUsers {
 }
 
 #[account]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 pub struct RssSource {
     document: Vec<u8>,
 }
@@ -335,16 +292,6 @@ impl RssSource {
     pub fn default_size() -> usize {
         let default_value = RssSource::default();
         size_of_val(&default_value)
-    }
-}
-impl Default for RssSource {
-    fn default() -> Self {
-        let document = OPML::from_str(DEFAULT_CONFIG_FILE).expect("never failed because is valid");
-        let document_str = document.to_string().expect("never failed because is valid");
-
-        Self {
-            document: document_str.as_bytes().to_vec(),
-        }
     }
 }
 

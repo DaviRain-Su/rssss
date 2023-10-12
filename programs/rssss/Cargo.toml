@@ -17,4 +17,3 @@ default = []
 
 [dependencies]
 anchor-lang = "0.26.0"
-opml = "1.1.5"
