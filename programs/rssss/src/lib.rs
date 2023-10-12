@@ -12,9 +12,30 @@ declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 /// one month as seconds
 pub const DURATION_ONE_MONTH: i64 = 60 * 60 * 24 * 30;
 
+// Assume a maximum number of users for space allocation
+pub const MAX_USERS: usize = 1000;
+
 #[program]
 pub mod rssss {
     use super::*;
+
+    pub fn initialize_logged_in_users(ctx: Context<InitializeLoggedInUsers>) -> Result<()> {
+        let logged_in_users = LoggedInUsers::default();
+        ctx.accounts
+            .logged_in_users_account
+            .set_inner(logged_in_users);
+        Ok(())
+    }
+
+    pub fn add_logged_in_user(ctx: Context<AddLoggedInUser>, user_pubkey: Pubkey) -> Result<()> {
+        let logged_in_users_account = ctx.accounts.logged_in_users_account.borrow_mut();
+        if logged_in_users_account.users.len() < MAX_USERS {
+            logged_in_users_account.users.push(user_pubkey);
+            Ok(())
+        } else {
+            Err(ErrorCode::MaxUsersReached.into())
+        }
+    }
 
     pub fn initialize(ctx: Context<Initialize>, price: u64) -> Result<()> {
         let rss_source = RssSource::default();
@@ -71,6 +92,10 @@ pub mod rssss {
     pub fn subscribe(ctx: Context<Subscribe>, price: u64) -> Result<()> {
         let subscription_account = ctx.accounts.subscription_account.borrow_mut();
 
+        // Calculate 5% fee
+        let fee = price / 20; // 5%
+        let net_price = price - fee; // Amount after fee is deducted
+
         // first: transfer lamports to subscription_account
         // check buyer have enought balance
         if ctx.accounts.user.to_account_info().clone().lamports() <= price {
@@ -84,7 +109,17 @@ pub mod rssss {
                 to: subscription_account.to_account_info().clone(),
             },
         );
-        system_program::transfer(cpi_context, price)?;
+        system_program::transfer(cpi_context, net_price)?;
+
+        // Transfer fee to the platform fee account
+        let cpi_context_fee = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.user.to_account_info().clone(),
+                to: ctx.accounts.fee_account.to_account_info().clone(),
+            },
+        );
+        system_program::transfer(cpi_context_fee, fee)?;
 
         // Get the current time
         let current_time = Clock::get()?.unix_timestamp;
@@ -111,6 +146,22 @@ pub mod rssss {
         }
 
         Ok(())
+    }
+
+    pub fn get_active_subscriptions(
+        ctx: Context<GetActiveSubscriptions>,
+        current_time: i64,
+    ) -> Result<Vec<Pubkey>> {
+        let subscriptions_account = &ctx.accounts.subscriptions_account;
+        let mut active_subscribers = Vec::new();
+
+        for subscription in &subscriptions_account.subscriptions {
+            if subscription.is_active(current_time) {
+                active_subscribers.push(subscription.seller);
+            }
+        }
+
+        Ok(active_subscribers)
     }
 }
 
@@ -171,6 +222,8 @@ pub struct RemoveItem<'info> {
 
 #[derive(Accounts)]
 pub struct Subscribe<'info> {
+    // Account for collecting platform fees
+    pub fee_account: AccountInfo<'info>,
     // you want subscription account
     pub subscription_account: AccountInfo<'info>,
     #[account(
@@ -194,6 +247,48 @@ pub struct CancelSubscribe<'info> {
     pub subscriptions_account: Account<'info, Subscriptions>,
     #[account(mut)]
     pub user: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct GetActiveSubscriptions<'info> {
+    #[account(
+        seeds = [b"subscriptions", user.key().as_ref()],
+        bump,
+    )]
+    pub subscriptions_account: Account<'info, Subscriptions>,
+    pub user: Signer<'info>,
+}
+
+/// this acccount init by platform
+#[derive(Accounts)]
+pub struct InitializeLoggedInUsers<'info> {
+    #[account(
+        init,
+        payer = user,
+        space = 8 + (32 * MAX_USERS),  // Assume a maximum number of users for space allocation
+        seeds = [b"logged-in-users"],
+        bump
+    )]
+    pub logged_in_users_account: Account<'info, LoggedInUsers>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[account]
+#[derive(PartialEq, Debug, Default)]
+pub struct LoggedInUsers {
+    pub users: Vec<Pubkey>,
+}
+
+#[derive(Accounts)]
+pub struct AddLoggedInUser<'info> {
+    #[account(
+        mut,
+        seeds = [b"logged-in-users"],
+        bump
+    )]
+    pub logged_in_users_account: Account<'info, LoggedInUsers>,
 }
 
 #[account]
@@ -285,6 +380,8 @@ pub enum ErrorCode {
     IncorrectAmount,
     #[msg("Insufficient balance.")]
     InsufficientBalance,
+    #[msg("Max users reached.")]
+    MaxUsersReached,
 }
 
 #[test]
