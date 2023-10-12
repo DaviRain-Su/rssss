@@ -1307,8 +1307,6 @@ version = "0.1.0"
 dependencies = [
  "anchor-lang",
  "opml",
- "serde",
- "serde_json",
 ]
 
 [[package]]

@@ -1,11 +1,9 @@
-#![allow(clippy::result_large_err)]
-
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
-use core::mem::size_of;
-use core::mem::size_of_val;
 use opml::{Outline, OPML};
 use std::borrow::BorrowMut;
+use std::mem::size_of;
+use std::mem::size_of_val;
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
@@ -277,12 +275,6 @@ pub struct InitializeLoggedInUsers<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[account]
-#[derive(PartialEq, Debug, Default)]
-pub struct LoggedInUsers {
-    pub users: Vec<Pubkey>,
-}
-
 #[derive(Accounts)]
 pub struct AddLoggedInUser<'info> {
     #[account(
@@ -291,6 +283,12 @@ pub struct AddLoggedInUser<'info> {
         bump
     )]
     pub logged_in_users_account: Account<'info, LoggedInUsers>,
+}
+
+#[account]
+#[derive(PartialEq, Debug, Default)]
+pub struct LoggedInUsers {
+    pub users: Vec<Pubkey>,
 }
 
 #[account]
@@ -327,17 +325,6 @@ impl Default for RssSource {
     }
 }
 
-#[derive(Debug, PartialEq, borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub struct OPMLResponses {
-    pub res: Vec<OPMLResponse>,
-}
-
-#[derive(Debug, PartialEq, borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub struct OPMLResponse {
-    pub title: String,
-    pub html_url: String,
-}
-
 #[account]
 #[derive(PartialEq, Debug, Default)]
 pub struct Subscriptions {
@@ -354,7 +341,7 @@ pub struct Subscription {
 }
 
 impl Subscription {
-    pub const SIZE: usize = 32 + 8 + 1;
+    pub const SIZE: usize = 32 + 8 + 8 + 8;
 
     // Checks if the subscription is active based on the current timestamp.
     pub fn is_active(&self, current_time: i64) -> bool {
@@ -395,18 +382,4 @@ pub enum ErrorCode {
     InsufficientBalance,
     #[msg("Max users reached.")]
     MaxUsersReached,
-}
-
-#[test]
-fn test_rss_source_size() {
-    let default_size = RssSource::default_size();
-    println!("default size {}", default_size);
-}
-
-#[test]
-fn der_and_ser_rss_source() {
-    let rss_source = RssSource::default();
-    let string = String::from_utf8(rss_source.document).unwrap();
-    let opml = OPML::from_str(&string).unwrap();
-    println!("opml = {:#?}", opml);
 }
